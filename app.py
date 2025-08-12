@@ -42,7 +42,7 @@ section[data-testid="stSidebar"] {
 """, unsafe_allow_html=True)
 
 # Database connection
-DB_PATH = "food.db"
+DB_PATH = "food_wastage.db"
 
 @st.cache_resource
 def get_conn():
