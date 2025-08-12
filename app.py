@@ -22,14 +22,57 @@ st.markdown(
         --accent-green: #83b489;
         --dark-green: #2f6f3a;
       }
+
+      /* Backgrounds */
       .reportview-container { background: var(--beige); }
       .stApp { background: var(--beige); }
-      header { background: linear-gradient(90deg,var(--soft-green), #f0f7f0); padding: 12px; border-radius: 10px; }
-      .stButton>button { background-color: var(--accent-green); color: white; border-radius: 8px; }
-      .card { background: white; border-radius: 12px; padding: 14px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); }
-      .kpi { font-size: 20px; color: var(--dark-green); font-weight: 700; }
-      .small-muted { color: #6b6b6b; font-size:12px; }
-      .logo-row { display:flex; align-items:center; gap:12px; }
+
+      /* Global font color */
+      html, body, [class*="css"] {
+        color: var(--dark-green) !important;
+      }
+
+      /* Header styling */
+      header {
+        background: linear-gradient(90deg, var(--soft-green), #f0f7f0);
+        padding: 12px;
+        border-radius: 10px;
+      }
+
+      /* Buttons */
+      .stButton>button {
+        background-color: var(--accent-green);
+        color: white !important;
+        border-radius: 8px;
+      }
+
+      /* Card */
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+      }
+
+      /* KPI text */
+      .kpi {
+        font-size: 20px;
+        color: var(--dark-green);
+        font-weight: 700;
+      }
+
+      /* Muted text stays grey */
+      .small-muted {
+        color: #6b6b6b !important;
+        font-size: 12px;
+      }
+
+      /* Logo row alignment */
+      .logo-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
     </style>
     """,
     unsafe_allow_html=True,
