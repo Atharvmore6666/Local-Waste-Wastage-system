@@ -11,7 +11,7 @@ from PIL import Image
 # ---------------
 st.set_page_config(page_title="Local Food Wastage System", layout="wide", page_icon="🌿")
 
-st.markdown("""
+st.markdown(r"""
 <style>
 :root {
     --beige: #E8E2D0;  /* darker beige for contrast */
@@ -69,6 +69,7 @@ section[data-testid="stSidebar"] h2 {
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ---------------
 # DB Setup
