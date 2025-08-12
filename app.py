@@ -3,148 +3,98 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 import altair as alt
-from datetime import datetime, timedelta
+from datetime import datetime
 from PIL import Image
 
-# ---------------
-# CONFIG + THEME
-# ---------------
+# --- Config & Styling ---
 st.set_page_config(page_title="Local Food Wastage System", layout="wide", page_icon="🌿")
 
-st.markdown(r"""
+st.markdown("""
 <style>
-:root {
-    --beige: #E8E2D0;  /* darker beige for contrast */
-    --dark-green: #2E5339;
-    --accent-green: #4F8F4F;
-    --text-dark: #1A1A1A;
-}
-.stApp {
-    background-color: var(--beige);
-    color: var(--dark-green);
-    font-family: 'Segoe UI', sans-serif;
-}
-h1, h2, h3, h4, h5, h6 {
-    color: var(--dark-green) !important;
-    font-weight: 700;
-}
-section[data-testid="stSidebar"] {
-    background-color: var(--dark-green);
-    color: white;
-}
-section[data-testid="stSidebar"] h1, 
-section[data-testid="stSidebar"] h2 {
-    color: white !important;
-}
-.block-container {
-    background: var(--beige);
-    padding: 1rem;
-}
-.css-1d391kg, .css-12oz5g7 {
-    background-color: white;
-    padding: 1rem;
-    border-radius: 10px;
-    box-shadow: 0px 3px 8px rgba(0,0,0,0.15);
-    color: var(--dark-green);
-}
-.dataframe th {
-    background-color: var(--accent-green);
-    color: white !important;
-}
-.dataframe td {
-    background-color: white;
-    color: var(--dark-green) !important;
-}
-.stButton>button {
-    background-color: var(--accent-green);
-    color: white;
-    border-radius: 8px;
-    padding: 0.5rem 1rem;
-    font-weight: bold;
-    border: none;
-}
-.stButton>button:hover {
-    background-color: var(--dark-green);
-    color: white;
-}
+    :root {
+        --beige: #E8E2D0;
+        --dark-green: #2E5339;
+        --accent-green: #4F8F4F;
+    }
+    .stApp {
+        background-color: var(--beige);
+        color: var(--dark-green);
+        font-family: 'Segoe UI', sans-serif;
+    }
+    h1,h2,h3 {
+        color: var(--dark-green);
+        font-weight: 700;
+    }
+    section[data-testid="stSidebar"] {
+        background-color: var(--dark-green);
+        color: white;
+    }
+    .css-1d391kg, .css-12oz5g7 {
+        background-color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+        color: var(--dark-green);
+    }
+    .stButton>button {
+        background-color: var(--accent-green);
+        color: white;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: bold;
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: var(--dark-green);
+    }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ---------------
-# DB Setup
-# ---------------
+# --- Database Setup ---
 DB_PATH = "food_wastage.db"
 
-def initialize_db_from_csv(conn):
-    required_files = ["providers_data.csv", "receivers_data.csv", "food_listings_data.csv", "claims_data.csv"]
-    missing = [f for f in required_files if not os.path.exists(f)]
-    if missing:
-        st.warning(f"Missing CSV files: {', '.join(missing)}. Place them in repo root and refresh.")
-        return False
-
+def load_csvs_to_db(conn):
+    csv_files = {
+        "Providers": "providers_data.csv",
+        "Receivers": "receivers_data.csv",
+        "Food_Listings": "food_listings_data.csv",
+        "Claims": "claims_data.csv",
+    }
+    for table, csv_file in csv_files.items():
+        if not os.path.exists(csv_file):
+            st.error(f"Missing CSV file: {csv_file}. Please add it to repo root.")
+            return False
     try:
-        providers = pd.read_csv("providers_data.csv", dtype=str)
-        receivers = pd.read_csv("receivers_data.csv", dtype=str)
-        food = pd.read_csv("food_listings_data.csv", dtype=str)
-        claims = pd.read_csv("claims_data.csv", dtype=str)
-
-        # Clean string columns
-        for df in (providers, receivers, food, claims):
-            for c in df.select_dtypes(include=['object']).columns:
-                df[c] = df[c].str.strip().replace({'nan':'', 'None':''})
-
-        # Normalize City/Location casing
-        if "City" in providers.columns:
-            providers["City"] = providers["City"].str.title().fillna("Unknown City")
-        if "City" in receivers.columns:
-            receivers["City"] = receivers["City"].str.title().fillna("Unknown City")
-        if "Location" in food.columns:
-            food["Location"] = food["Location"].str.title().fillna("Unknown Location")
-
-        # Convert numeric columns
-        for col in ["Provider_ID","Receiver_ID","Food_ID","Quantity","Claim_ID"]:
-            for df in (providers, receivers, food, claims):
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-
-        # Parse dates
-        if "Expiry_Date" in food.columns:
-            food["Expiry_Date"] = pd.to_datetime(food["Expiry_Date"], errors="coerce")
-        if "Timestamp" in claims.columns:
-            claims["Timestamp"] = pd.to_datetime(claims["Timestamp"], errors="coerce")
-
-        # Write tables
-        providers.to_sql("Providers", conn, index=False, if_exists="replace")
-        receivers.to_sql("Receivers", conn, index=False, if_exists="replace")
-        food.to_sql("Food_Listings", conn, index=False, if_exists="replace")
-        claims.to_sql("Claims", conn, index=False, if_exists="replace")
-
+        for table, csv_file in csv_files.items():
+            df = pd.read_csv(csv_file)
+            # Strip whitespace
+            for col in df.select_dtypes(include=['object']).columns:
+                df[col] = df[col].str.strip()
+            # Convert dates and numeric types explicitly
+            if table == "Food_Listings" and "Expiry_Date" in df.columns:
+                df["Expiry_Date"] = pd.to_datetime(df["Expiry_Date"], errors='coerce')
+            if table == "Claims" and "Timestamp" in df.columns:
+                df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors='coerce')
+            df.to_sql(table, conn, index=False, if_exists="replace")
         conn.commit()
         return True
     except Exception as e:
-        st.error(f"Error initializing DB from CSV: {e}")
+        st.error(f"Error loading CSVs to DB: {e}")
         return False
 
-# If DB missing, create from CSVs
 if not os.path.exists(DB_PATH):
     conn_tmp = sqlite3.connect(DB_PATH)
-    ok = initialize_db_from_csv(conn_tmp)
-    conn_tmp.close()
-    if ok:
+    if load_csvs_to_db(conn_tmp):
         st.success("Database created from CSV files.")
     else:
-        st.warning("Could not create DB. Place all CSV files in repo root and refresh.")
+        st.warning("Failed to create database. Check CSV files.")
+    conn_tmp.close()
 
-# Connect to DB
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
 def table_exists(name):
-    try:
-        df = pd.read_sql(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{name}';", conn)
-        return not df.empty
-    except:
-        return False
+    df = pd.read_sql(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{name}';", conn)
+    return not df.empty
 
 def run_query(sql, params=None):
     try:
@@ -156,277 +106,314 @@ def run_query(sql, params=None):
         st.error(f"SQL error: {e}")
         return pd.DataFrame()
 
-# ---------------
-# SQL Queries
-# ---------------
-QUERIES = {
-    "Q1: Providers & Receivers per City": (
-        """
-        SELECT City, SUM(Providers) AS Providers_Count, SUM(Receivers) AS Receivers_Count
-        FROM (
-            SELECT City, COUNT(Provider_ID) AS Providers, 0 AS Receivers FROM Providers GROUP BY City
-            UNION ALL
-            SELECT City, 0 AS Providers, COUNT(Receiver_ID) AS Receivers FROM Receivers GROUP BY City
-        )
-        GROUP BY City
-        ORDER BY Providers_Count DESC;
-        """
-    ),
-    "Q2: Top contributing provider type (by quantity)": (
-        """
-        SELECT Provider_Type, SUM(Quantity) AS Total_Quantity
-        FROM Food_Listings
-        GROUP BY Provider_Type
-        ORDER BY Total_Quantity DESC;
-        """
-    ),
-    "Q3: Contact info of providers in a city (param)": (
-        """
-        SELECT Name, Type, City, Contact
-        FROM Providers
-        WHERE LOWER(City) = LOWER(?);
-        """
-    ),
-    "Q4: Receivers with most claims": (
-        """
-        SELECT r.Receiver_ID, r.Name, r.City, COUNT(c.Claim_ID) AS Total_Claims
-        FROM Claims c
-        JOIN Receivers r ON c.Receiver_ID = r.Receiver_ID
-        GROUP BY r.Receiver_ID, r.Name
-        ORDER BY Total_Claims DESC;
-        """
-    ),
-    "Q5: Total quantity of food available": (
-        """
-        SELECT IFNULL(SUM(Quantity),0) AS Total_Quantity FROM Food_Listings;
-        """
-    ),
-    "Q6: City with highest number of listings": (
-        """
-        SELECT Location AS City, COUNT(*) AS Listings_Count
-        FROM Food_Listings
-        GROUP BY Location
-        ORDER BY Listings_Count DESC
-        LIMIT 10;
-        """
-    ),
-    "Q7: Most commonly available food types": (
-        """
-        SELECT Food_Type, COUNT(*) AS Occurrences, SUM(Quantity) AS Total_Quantity
-        FROM Food_Listings
-        GROUP BY Food_Type
-        ORDER BY Occurrences DESC;
-        """
-    ),
-    "Q8: Claims made per food item": (
-        """
-        SELECT f.Food_ID, f.Food_Name, COUNT(c.Claim_ID) AS Claims_Count
-        FROM Food_Listings f
-        LEFT JOIN Claims c ON f.Food_ID = c.Food_ID
-        GROUP BY f.Food_ID, f.Food_Name
-        ORDER BY Claims_Count DESC;
-        """
-    ),
-    "Q9: Provider with highest successful claims": (
-        """
-        SELECT p.Provider_ID, p.Name, p.City, COUNT(c.Claim_ID) AS Completed_Claims
-        FROM Claims c
-        JOIN Food_Listings f ON c.Food_ID = f.Food_ID
-        JOIN Providers p ON f.Provider_ID = p.Provider_ID
-        WHERE LOWER(c.Status) = 'completed'
-        GROUP BY p.Provider_ID, p.Name
-        ORDER BY Completed_Claims DESC
-        LIMIT 10;
-        """
-    ),
-    "Q10: Claims status distribution (%)": (
-        """
-        SELECT Status, COUNT(*) AS Count,
-               ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM Claims),2) AS Percentage
-        FROM Claims
-        GROUP BY Status;
-        """
-    ),
-    "Q11: Average quantity claimed per receiver": (
-        """
-        SELECT r.Receiver_ID, r.Name,
-               ROUND(AVG(f.Quantity),2) AS Avg_Quantity,
-               SUM(f.Quantity) AS Total_Quantity,
-               COUNT(c.Claim_ID) AS Claim_Count
-        FROM Claims c
-        JOIN Receivers r ON c.Receiver_ID = r.Receiver_ID
-        JOIN Food_Listings f ON c.Food_ID = f.Food_ID
-        GROUP BY r.Receiver_ID, r.Name
-        ORDER BY Total_Quantity DESC
-        LIMIT 50;
-        """
-    ),
-    "Q12: Most claimed meal type": (
-        """
-        SELECT f.Meal_Type, COUNT(c.Claim_ID) AS Claims_Count, SUM(f.Quantity) AS Total_Quantity
-        FROM Claims c
-        JOIN Food_Listings f ON c.Food_ID = f.Food_ID
-        GROUP BY f.Meal_Type
-        ORDER BY Claims_Count DESC;
-        """
-    ),
-    "Q13: Total quantity donated by each provider": (
-        """
-        SELECT p.Provider_ID, p.Name, p.City, SUM(f.Quantity) AS Total_Donated
-        FROM Food_Listings f
-        JOIN Providers p ON f.Provider_ID = p.Provider_ID
-        GROUP BY p.Provider_ID, p.Name
-        ORDER BY Total_Donated DESC
-        LIMIT 50;
-        """
-    ),
-    "Q14: Expired food listings": (
-        """
-        SELECT f.Food_ID, f.Food_Name, f.Quantity, f.Expiry_Date, p.Name AS Provider_Name, f.Location
-        FROM Food_Listings f
-        LEFT JOIN Providers p ON f.Provider_ID = p.Provider_ID
-        WHERE date(f.Expiry_Date) < date('now')
-        ORDER BY f.Expiry_Date ASC;
-        """
-    ),
-    "Q15: Listings expiring within next 3 days": (
-        """
-        SELECT f.Food_ID, f.Food_Name, f.Quantity, f.Expiry_Date, p.Name AS Provider_Name, f.Location,
-               ABS(CAST(julianday(date(f.Expiry_Date)) - julianday(date('now')) AS INTEGER)) AS days_to_expiry
-        FROM Food_Listings f
-        LEFT JOIN Providers p ON f.Provider_ID = p.Provider_ID
-        WHERE date(f.Expiry_Date) BETWEEN date('now') AND date('now','+3 days')
-        ORDER BY days_to_expiry ASC;
-        """
-    ),
-}
+def run_command(sql, params=None):
+    try:
+        cur = conn.cursor()
+        if params:
+            cur.execute(sql, params)
+        else:
+            cur.execute(sql)
+        conn.commit()
+        return True
+    except Exception as e:
+        st.error(f"DB command error: {e}")
+        return False
 
-# ---------------
-# Load Images for header
-# ---------------
-LOGO_LEFT = "logo.png"
-LOGO_RIGHT = "recycle.png"
+# --- Load images ---
+left_img = Image.open("logo.png") if os.path.exists("logo.png") else None
+right_img = Image.open("recycle.png") if os.path.exists("recycle.png") else None
 
-left_img = None
-right_img = None
-try:
-    if os.path.exists(LOGO_LEFT):
-        left_img = Image.open(LOGO_LEFT)
-    if os.path.exists(LOGO_RIGHT):
-        right_img = Image.open(LOGO_RIGHT)
-except:
-    pass
-
+# --- Header ---
 c1, c2, c3 = st.columns([1,6,1])
 with c1:
     if left_img:
         st.image(left_img, width=100)
 with c2:
-    st.markdown("<div style='text-align:center'><h1 style='margin:0; color:#2f6f3a;'>🌿 Local Food Wastage Management System</h1><div class='small-muted'>Reduce waste — connect surplus food providers with people in need.</div></div>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; color:#2E5339;'>🌿 Local Food Wastage Management System</h1>", unsafe_allow_html=True)
 with c3:
     if right_img:
         st.image(right_img, width=80)
 st.markdown("---")
 
-# ---------------
-# Sidebar & Navigation
-# ---------------
-st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Dashboard", "Queries", "CRUD", "Data", "EDA", "About"])
+# --- Sidebar Navigation ---
+page = st.sidebar.radio("Navigation", [
+    "Dashboard", "Filter Food Donations", "Queries", "CRUD", "About"
+])
 
-# ---------------
-# DASHBOARD
-# ---------------
+# --- Dashboard ---
 if page == "Dashboard":
     st.header("Dashboard")
 
-    # Basic KPIs
-    total_providers = run_query("SELECT COUNT(*) as count FROM Providers").iloc[0,0] if table_exists("Providers") else 0
-    total_receivers = run_query("SELECT COUNT(*) as count FROM Receivers").iloc[0,0] if table_exists("Receivers") else 0
-    total_food_qty = run_query("SELECT IFNULL(SUM(Quantity),0) as total FROM Food_Listings").iloc[0,0] if table_exists("Food_Listings") else 0
-    total_claims = run_query("SELECT COUNT(*) as count FROM Claims").iloc[0,0] if table_exists("Claims") else 0
+    if all(table_exists(t) for t in ["Providers", "Receivers", "Food_Listings", "Claims"]):
+        total_providers = run_query("SELECT COUNT(*) AS count FROM Providers").iloc[0,0]
+        total_receivers = run_query("SELECT COUNT(*) AS count FROM Receivers").iloc[0,0]
+        total_food_qty = run_query("SELECT IFNULL(SUM(Quantity),0) AS total FROM Food_Listings").iloc[0,0]
+        total_claims = run_query("SELECT COUNT(*) AS count FROM Claims").iloc[0,0]
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Providers", total_providers)
-    col2.metric("Receivers", total_receivers)
-    col3.metric("Total Food Quantity", total_food_qty)
-    col4.metric("Total Claims", total_claims)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Providers", total_providers)
+        c2.metric("Receivers", total_receivers)
+        c3.metric("Total Food Quantity", total_food_qty)
+        c4.metric("Total Claims", total_claims)
 
-    st.markdown("### Top Providers by Donated Quantity")
-    if table_exists("Food_Listings") and table_exists("Providers"):
-        df_top_prov = run_query(QUERIES["Q13: Total quantity donated by each provider"])
-        if not df_top_prov.empty:
-            chart = alt.Chart(df_top_prov.head(10)).mark_bar().encode(
-                x=alt.X("Total_Donated:Q", title="Total Donated"),
-                y=alt.Y("Name:N", sort='-x', title="Provider"),
-                tooltip=["Name", "Total_Donated"]
+        st.subheader("Top Providers by Donated Quantity")
+        top_providers = run_query("""
+            SELECT p.Name, SUM(f.Quantity) AS Total_Donated 
+            FROM Food_Listings f JOIN Providers p ON f.Provider_ID = p.Provider_ID
+            GROUP BY p.Name ORDER BY Total_Donated DESC LIMIT 10
+        """)
+        if not top_providers.empty:
+            bar_chart = alt.Chart(top_providers).mark_bar().encode(
+                x=alt.X('Total_Donated:Q', title='Quantity Donated'),
+                y=alt.Y('Name:N', sort='-x', title='Provider'),
+                tooltip=['Name', 'Total_Donated']
             ).properties(height=350)
-            st.altair_chart(chart, use_container_width=True)
-        else:
-            st.info("No donation data available.")
+            st.altair_chart(bar_chart, use_container_width=True)
 
-    st.markdown("### Claims Status Distribution")
-    if table_exists("Claims"):
-        df_status = run_query(QUERIES["Q10: Claims status distribution (%)"])
-        if not df_status.empty:
-            chart = alt.Chart(df_status).mark_arc().encode(
-                theta=alt.Theta("Count:Q"),
-                color=alt.Color("Status:N"),
-                tooltip=["Status", "Count", "Percentage"]
+        st.subheader("Claims Status Distribution")
+        claims_status = run_query("""
+            SELECT Status, COUNT(*) AS Count 
+            FROM Claims GROUP BY Status
+        """)
+        if not claims_status.empty:
+            pie_chart = alt.Chart(claims_status).mark_arc().encode(
+                theta=alt.Theta('Count:Q'),
+                color=alt.Color('Status:N'),
+                tooltip=['Status', 'Count']
             ).properties(width=350, height=350)
-            st.altair_chart(chart, use_container_width=False)
-        else:
-            st.info("No claims data available.")
-
-# ... (You can add similar blocks for Queries, CRUD, Data, EDA, About pages) ...
-
-# ---------------
-# EDA page (example)
-# ---------------
-if page == "EDA":
-    st.header("Exploratory Data Analysis")
-
-    if not table_exists("Food_Listings"):
-        st.warning("Food_Listings table not found in the database.")
+            st.altair_chart(pie_chart)
     else:
-        df_food = run_query("SELECT * FROM Food_Listings")
-        st.markdown("### Food Listings Overview")
-        st.dataframe(df_food.head(10))
+        st.warning("Database tables are missing. Please check CSV import.")
 
-        # Food Type Distribution
-        chart = alt.Chart(df_food).mark_bar().encode(
-            x=alt.X('Food_Type:N', sort='-y', title='Food Type'),
-            y=alt.Y('count()', title='Count'),
-            color='Food_Type:N',
-            tooltip=['Food_Type', 'count()']
-        ).properties(width=600, height=400)
-        st.altair_chart(chart)
+# --- Filter Food Donations Page ---
+elif page == "Filter Food Donations":
+    st.header("Filter Food Donations")
 
-        # Quantity Distribution Boxplot
-        chart_box = alt.Chart(df_food).mark_boxplot().encode(
-            x='Food_Type:N',
-            y='Quantity:Q',
-            color='Food_Type:N'
-        ).properties(width=600, height=400)
-        st.altair_chart(chart_box)
+    # Load data for filtering
+    food_df = run_query("SELECT f.*, p.Name AS Provider_Name, p.Contact AS Provider_Contact FROM Food_Listings f JOIN Providers p ON f.Provider_ID = p.Provider_ID")
+    if food_df.empty:
+        st.warning("No food listings found.")
+    else:
+        # Filters
+        locations = sorted(food_df["Location"].dropna().unique())
+        providers = sorted(food_df["Provider_Name"].dropna().unique())
+        food_types = sorted(food_df["Food_Type"].dropna().unique())
 
-        # Expiry Dates Histogram
-        if 'Expiry_Date' in df_food.columns and not df_food['Expiry_Date'].isnull().all():
-            df_food['Expiry_Date'] = pd.to_datetime(df_food['Expiry_Date'], errors='coerce')
-            chart_hist = alt.Chart(df_food).mark_bar().encode(
-                x=alt.X('yearmonth(Expiry_Date):T', title='Expiry Month'),
-                y='count()',
-                tooltip=[alt.Tooltip('yearmonth(Expiry_Date):T', title='Expiry Month'), 'count()']
-            ).properties(width=600, height=400)
-            st.altair_chart(chart_hist)
-        else:
-            st.info("No expiry date data available.")
+        sel_location = st.selectbox("Select Location (City)", options=["All"] + locations)
+        sel_provider = st.selectbox("Select Provider", options=["All"] + providers)
+        sel_food_type = st.selectbox("Select Food Type", options=["All"] + food_types)
 
-# ---------------
-# Cleanup on exit
-# ---------------
-def cleanup():
-    conn.close()
+        filtered_df = food_df.copy()
+        if sel_location != "All":
+            filtered_df = filtered_df[filtered_df["Location"] == sel_location]
+        if sel_provider != "All":
+            filtered_df = filtered_df[filtered_df["Provider_Name"] == sel_provider]
+        if sel_food_type != "All":
+            filtered_df = filtered_df[filtered_df["Food_Type"] == sel_food_type]
 
-import atexit
-atexit.register(cleanup)
+        st.write(f"Showing {len(filtered_df)} matching food listings:")
+        if len(filtered_df) > 0:
+            st.dataframe(filtered_df[["Food_ID","Food_Name","Quantity","Expiry_Date","Location","Provider_Name","Provider_Contact","Food_Type","Meal_Type"]])
+
+# --- Queries Page ---
+elif page == "Queries":
+    st.header("Predefined SQL Queries & Insights")
+
+    QUERIES = {
+        "1. Providers & Receivers per City": """
+            SELECT City, SUM(Providers) AS Providers_Count, SUM(Receivers) AS Receivers_Count
+            FROM (
+                SELECT City, COUNT(Provider_ID) AS Providers, 0 AS Receivers FROM Providers GROUP BY City
+                UNION ALL
+                SELECT City, 0 AS Providers, COUNT(Receiver_ID) AS Receivers FROM Receivers GROUP BY City
+            )
+            GROUP BY City ORDER BY Providers_Count DESC;
+        """,
+        "2. Top Contributing Provider Type (by quantity)": """
+            SELECT Provider_Type, SUM(Quantity) AS Total_Quantity
+            FROM Food_Listings
+            GROUP BY Provider_Type
+            ORDER BY Total_Quantity DESC;
+        """,
+        "3. Contact Info of Providers in a City": """
+            SELECT Name, Type, City, Contact FROM Providers WHERE LOWER(City) = LOWER(?);
+        """,
+        "4. Receivers with Most Claims": """
+            SELECT r.Name, r.City, COUNT(c.Claim_ID) AS Total_Claims
+            FROM Claims c JOIN Receivers r ON c.Receiver_ID = r.Receiver_ID
+            GROUP BY r.Receiver_ID, r.Name ORDER BY Total_Claims DESC;
+        """,
+        "5. Total Quantity of Food Available": """
+            SELECT IFNULL(SUM(Quantity),0) AS Total_Quantity FROM Food_Listings;
+        """,
+        "6. City with Highest Number of Listings": """
+            SELECT Location AS City, COUNT(*) AS Listings_Count
+            FROM Food_Listings GROUP BY Location ORDER BY Listings_Count DESC LIMIT 10;
+        """,
+        "7. Most Commonly Available Food Types": """
+            SELECT Food_Type, COUNT(*) AS Occurrences, SUM(Quantity) AS Total_Quantity
+            FROM Food_Listings GROUP BY Food_Type ORDER BY Occurrences DESC;
+        """,
+        "8. Claims Made per Food Item": """
+            SELECT f.Food_Name, COUNT(c.Claim_ID) AS Claims_Count
+            FROM Food_Listings f LEFT JOIN Claims c ON f.Food_ID = c.Food_ID
+            GROUP BY f.Food_ID ORDER BY Claims_Count DESC;
+        """,
+        "9. Provider with Highest Successful Claims": """
+            SELECT p.Name, p.City, COUNT(c.Claim_ID) AS Completed_Claims
+            FROM Claims c
+            JOIN Food_Listings f ON c.Food_ID = f.Food_ID
+            JOIN Providers p ON f.Provider_ID = p.Provider_ID
+            WHERE LOWER(c.Status) = 'completed'
+            GROUP BY p.Provider_ID ORDER BY Completed_Claims DESC LIMIT 10;
+        """,
+        "10. Claims Status Distribution (%)": """
+            SELECT Status, COUNT(*) AS Count,
+                   ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM Claims),2) AS Percentage
+            FROM Claims GROUP BY Status;
+        """,
+        "11. Average Quantity Claimed per Receiver": """
+            SELECT r.Name, ROUND(AVG(f.Quantity),2) AS Avg_Quantity, SUM(f.Quantity) AS Total_Quantity, COUNT(c.Claim_ID) AS Claim_Count
+            FROM Claims c JOIN Receivers r ON c.Receiver_ID = r.Receiver_ID
+            JOIN Food_Listings f ON c.Food_ID = f.Food_ID
+            GROUP BY r.Receiver_ID ORDER BY Total_Quantity DESC LIMIT 50;
+        """,
+        "12. Most Claimed Meal Type": """
+            SELECT f.Meal_Type, COUNT(c.Claim_ID) AS Claims_Count, SUM(f.Quantity) AS Total_Quantity
+            FROM Claims c JOIN Food_Listings f ON c.Food_ID = f.Food_ID
+            GROUP BY f.Meal_Type ORDER BY Claims_Count DESC;
+        """,
+        "13. Total Quantity Donated by Each Provider": """
+            SELECT p.Name, p.City, SUM(f.Quantity) AS Total_Donated
+            FROM Food_Listings f JOIN Providers p ON f.Provider_ID = p.Provider_ID
+            GROUP BY p.Provider_ID ORDER BY Total_Donated DESC LIMIT 50;
+        """,
+        "14. Expired Food Listings": """
+            SELECT f.Food_Name, f.Quantity, f.Expiry_Date, p.Name AS Provider_Name, f.Location
+            FROM Food_Listings f LEFT JOIN Providers p ON f.Provider_ID = p.Provider_ID
+            WHERE date(f.Expiry_Date) < date('now') ORDER BY f.Expiry_Date ASC;
+        """,
+        "15. Listings Expiring Within Next 3 Days": """
+            SELECT f.Food_Name, f.Quantity, f.Expiry_Date, p.Name AS Provider_Name, f.Location,
+                   CAST(julianday(date(f.Expiry_Date)) - julianday(date('now')) AS INTEGER) AS Days_To_Expiry
+            FROM Food_Listings f LEFT JOIN Providers p ON f.Provider_ID = p.Provider_ID
+            WHERE date(f.Expiry_Date) BETWEEN date('now') AND date('now', '+3 days')
+            ORDER BY Days_To_Expiry ASC;
+        """,
+    }
+
+    selected_query = st.selectbox("Select Query", list(QUERIES.keys()))
+
+    if selected_query:
+        sql = QUERIES[selected_query]
+        params = None
+        # For query 3, get city input
+        if selected_query == "3. Contact Info of Providers in a City":
+            city = st.text_input("Enter city name").strip()
+            if city:
+                params = (city,)
+            else:
+                st.info("Enter city to run this query.")
+        if params or selected_query != "3. Contact Info of Providers in a City":
+            result_df = run_query(sql, params)
+            if not result_df.empty:
+                st.dataframe(result_df)
+            else:
+                st.info("No results found.")
+
+# --- CRUD Page ---
+elif page == "CRUD":
+    st.header("Manage Records (CRUD Operations)")
+
+    table_options = ["Providers", "Receivers", "Food_Listings", "Claims"]
+    selected_table = st.selectbox("Select Table to Manage", table_options)
+
+    if selected_table:
+        df = run_query(f"SELECT * FROM {selected_table}")
+        st.subheader(f"Existing records in {selected_table}")
+        st.dataframe(df)
+
+        st.markdown("---")
+        st.subheader(f"Add New Record to {selected_table}")
+
+        def add_record(table):
+            # Dynamically create input fields based on table columns
+            df_empty = run_query(f"SELECT * FROM {table} LIMIT 0")
+            new_data = {}
+            for col in df_empty.columns:
+                if col.lower() in ["id", "provider_id", "receiver_id", "food_id", "claim_id"]:
+                    # For PK, skip or let DB autoincrement if possible
+                    continue
+                if col.lower().endswith("date") or col.lower() == "timestamp":
+                    val = st.date_input(f"{col}", key=f"add_{col}")
+                    new_data[col] = val.strftime("%Y-%m-%d")
+                else:
+                    val = st.text_input(f"{col}", key=f"add_{col}")
+                    new_data[col] = val.strip()
+            if st.button("Add Record"):
+                # Prepare insert SQL
+                cols = ", ".join(new_data.keys())
+                placeholders = ", ".join("?" for _ in new_data)
+                values = tuple(new_data.values())
+                sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
+                if run_command(sql, values):
+                    st.success(f"Record added to {table}")
+                else:
+                    st.error("Failed to add record.")
+
+        add_record(selected_table)
+
+        st.markdown("---")
+        st.subheader(f"Update Record in {selected_table}")
+
+        if not df.empty:
+            record_ids = df.iloc[:,0].tolist()
+            selected_id = st.selectbox(f"Select {selected_table[:-1]} ID to update", record_ids)
+            if selected_id:
+                row = df[df.iloc[:,0] == selected_id].iloc[0]
+                update_data = {}
+                for col in df.columns:
+                    if col == df.columns[0]:
+                        st.write(f"**{col} (primary key):** {row[col]}")
+                        continue
+                    val = st.text_input(f"{col}", value=str(row[col]), key=f"upd_{col}")
+                    update_data[col] = val.strip()
+
+                if st.button("Update Record"):
+                    set_clause = ", ".join(f"{k} = ?" for k in update_data)
+                    values = tuple(update_data.values()) + (selected_id,)
+                    sql = f"UPDATE {selected_table} SET {set_clause} WHERE {df.columns[0]} = ?"
+                    if run_command(sql, values):
+                        st.success("Record updated.")
+                    else:
+                        st.error("Failed to update record.")
+
+        st.markdown("---")
+        st.subheader(f"Delete Record from {selected_table}")
+
+        if not df.empty:
+            del_id = st.selectbox(f"Select {selected_table[:-1]} ID to delete", record_ids, key="del_select")
+            if st.button("Delete Record"):
+                sql = f"DELETE FROM {selected_table} WHERE {df.columns[0]} = ?"
+                if run_command(sql, (del_id,)):
+                    st.success("Record deleted.")
+                else:
+                    st.error("Failed to delete record.")
+
+# --- About Page ---
+elif page == "About":
+    st.header("About")
+    st.markdown("""
+    This Local Food Wastage Management System connects surplus food providers with receivers in need,
+    helping reduce food waste and hunger.
+
+    **Features:**  
+    - Filter food donations by location, provider, and food type  
+    - Contact providers & receivers  
+    - Full CRUD operations for all records  
+    - 15 SQL-powered analysis queries to gain insights  
+    - User-friendly Streamlit interface with interactive charts  
+
+    **Data Source:** CSV files imported to SQLite database.  
+    Developed using Streamlit, SQLite, Pandas, Altair.
+    """)
