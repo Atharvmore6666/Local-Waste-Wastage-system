@@ -370,4 +370,63 @@ if page == "Dashboard":
         df_status = run_query(QUERIES["Q10: Claims status distribution (%)"])
         if not df_status.empty:
             chart = alt.Chart(df_status).mark_arc().encode(
-                theta=alt.Theta("Count:
+                theta=alt.Theta("Count:Q"),
+                color=alt.Color("Status:N"),
+                tooltip=["Status", "Count", "Percentage"]
+            ).properties(width=350, height=350)
+            st.altair_chart(chart, use_container_width=False)
+        else:
+            st.info("No claims data available.")
+
+# ... (You can add similar blocks for Queries, CRUD, Data, EDA, About pages) ...
+
+# ---------------
+# EDA page (example)
+# ---------------
+if page == "EDA":
+    st.header("Exploratory Data Analysis")
+
+    if not table_exists("Food_Listings"):
+        st.warning("Food_Listings table not found in the database.")
+    else:
+        df_food = run_query("SELECT * FROM Food_Listings")
+        st.markdown("### Food Listings Overview")
+        st.dataframe(df_food.head(10))
+
+        # Food Type Distribution
+        chart = alt.Chart(df_food).mark_bar().encode(
+            x=alt.X('Food_Type:N', sort='-y', title='Food Type'),
+            y=alt.Y('count()', title='Count'),
+            color='Food_Type:N',
+            tooltip=['Food_Type', 'count()']
+        ).properties(width=600, height=400)
+        st.altair_chart(chart)
+
+        # Quantity Distribution Boxplot
+        chart_box = alt.Chart(df_food).mark_boxplot().encode(
+            x='Food_Type:N',
+            y='Quantity:Q',
+            color='Food_Type:N'
+        ).properties(width=600, height=400)
+        st.altair_chart(chart_box)
+
+        # Expiry Dates Histogram
+        if 'Expiry_Date' in df_food.columns and not df_food['Expiry_Date'].isnull().all():
+            df_food['Expiry_Date'] = pd.to_datetime(df_food['Expiry_Date'], errors='coerce')
+            chart_hist = alt.Chart(df_food).mark_bar().encode(
+                x=alt.X('yearmonth(Expiry_Date):T', title='Expiry Month'),
+                y='count()',
+                tooltip=[alt.Tooltip('yearmonth(Expiry_Date):T', title='Expiry Month'), 'count()']
+            ).properties(width=600, height=400)
+            st.altair_chart(chart_hist)
+        else:
+            st.info("No expiry date data available.")
+
+# ---------------
+# Cleanup on exit
+# ---------------
+def cleanup():
+    conn.close()
+
+import atexit
+atexit.register(cleanup)
