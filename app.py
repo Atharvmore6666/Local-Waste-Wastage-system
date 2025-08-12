@@ -12,81 +12,79 @@ from PIL import Image
 # -----------------------
 st.set_page_config(page_title="Local Food Wastage System", layout="wide", page_icon="🌿")
 
-# Creative Green & Beige CSS (Improved Visibility)
-st.markdown(
-    """
+# ----------------------- 
+# CLEAN GREEN & BEIGE THEME 
+# -----------------------
+st.markdown("""
     <style>
-      :root {
-        --beige: #f7f4ef;         /* Background color */
-        --soft-green: #eaf3ea;    /* Light green */
-        --accent-green: #83b489;  /* Button/Highlight green */
-        --dark-green: #2f6f3a;    /* Main text green */
-      }
+    :root {
+        --beige: #E8E2D0;  /* darker beige for better contrast */
+        --dark-green: #2E5339;
+        --accent-green: #4F8F4F;
+        --text-dark: #1A1A1A; /* near-black for readability */
+    }
 
-      /* App Background */
-      html, body, .stApp {
-        background-color: var(--beige) !important;
-        color: var(--dark-green) !important; /* Default text color */
-      }
+    /* Main background */
+    .stApp {
+        background-color: var(--beige);
+        color: var(--text-dark);
+        font-family: 'Segoe UI', sans-serif;
+    }
 
-      /* Header styling */
-      header {
-        background: linear-gradient(90deg, var(--soft-green), #f0f7f0);
-        padding: 12px;
+    /* Headings */
+    h1, h2, h3, h4, h5, h6 {
+        color: var(--dark-green) !important;
+        font-weight: 700;
+    }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: var(--dark-green);
+        color: white;
+    }
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2 {
+        color: white !important;
+    }
+
+    /* Cards / containers */
+    .block-container {
+        background: var(--beige);
+        padding: 1rem;
+    }
+    .css-1d391kg, .css-12oz5g7 { /* generic card containers */
+        background-color: white;
+        padding: 1rem;
         border-radius: 10px;
-      }
+        box-shadow: 0px 3px 8px rgba(0,0,0,0.15);
+    }
 
-      /* Buttons - remove white text, use green background */
-      .stButton>button {
-        background-color: var(--accent-green) !important;
-        color: var(--dark-green) !important;
-        font-weight: 600 !important;
-        border: none !important;
-        border-radius: 8px !important;
-      }
+    /* Dataframe / table styling */
+    .dataframe th {
+        background-color: var(--accent-green);
+        color: white !important;
+    }
+    .dataframe td {
+        background-color: white;
+        color: var(--text-dark) !important;
+    }
 
-      /* KPI text */
-      .kpi {
-        font-size: 20px;
-        color: var(--dark-green) !important;
-        font-weight: 700 !important;
-      }
-
-      /* Table text & headers */
-      .stDataFrame, .dataframe, th, td {
-        color: var(--dark-green) !important;
-        background-color: white !important;
-      }
-
-      /* Muted text remains softer but visible */
-      .small-muted {
-        color: #5a5a5a !important;
-        font-size: 12px;
-      }
-
-      /* Cards */
-      .card {
-        background: white !important;
-        color: var(--dark-green) !important;
-        border-radius: 12px;
-        padding: 14px;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.06);
-      }
-
-      /* Sidebar */
-      section[data-testid="stSidebar"] {
-        background-color: var(--soft-green) !important;
-        color: var(--dark-green) !important;
-      }
-
-      /* Chart labels */
-      text {
-        fill: var(--dark-green) !important;
-      }
+    /* Buttons */
+    .stButton>button {
+        background-color: var(--accent-green);
+        color: white;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: bold;
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: var(--dark-green);
+        color: white;
+    }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
+
 
 # -----------------------
 # DB Helpers
