@@ -434,4 +434,4 @@ elif page == "EDA":
     # Food listings by expiry status
     today = pd.to_datetime(date.today())
     df_food['Expiry_Date'] = pd.to_datetime(df_food['Expiry_Date'], errors='coerce')
-    df_food['Days_to_Expiry
+    df_food['Days_to_Expiry]
