@@ -12,24 +12,21 @@ from PIL import Image
 # -----------------------
 st.set_page_config(page_title="Local Food Wastage System", layout="wide", page_icon="🌿")
 
-# Creative Green & Beige CSS
+# Creative Green & Beige CSS (Improved Visibility)
 st.markdown(
     """
     <style>
       :root {
-        --beige: #f7f4ef;
-        --soft-green: #eaf3ea;
-        --accent-green: #83b489;
-        --dark-green: #2f6f3a;
+        --beige: #f7f4ef;         /* Background color */
+        --soft-green: #eaf3ea;    /* Light green */
+        --accent-green: #83b489;  /* Button/Highlight green */
+        --dark-green: #2f6f3a;    /* Main text green */
       }
 
-      /* Backgrounds */
-      .reportview-container { background: var(--beige); }
-      .stApp { background: var(--beige); }
-
-      /* Global font color */
-      html, body, [class*="css"] {
-        color: var(--dark-green) !important;
+      /* App Background */
+      html, body, .stApp {
+        background-color: var(--beige) !important;
+        color: var(--dark-green) !important; /* Default text color */
       }
 
       /* Header styling */
@@ -39,39 +36,52 @@ st.markdown(
         border-radius: 10px;
       }
 
-      /* Buttons */
+      /* Buttons - remove white text, use green background */
       .stButton>button {
-        background-color: var(--accent-green);
-        color: white !important;
-        border-radius: 8px;
-      }
-
-      /* Card */
-      .card {
-        background: white;
-        border-radius: 12px;
-        padding: 14px;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+        background-color: var(--accent-green) !important;
+        color: var(--dark-green) !important;
+        font-weight: 600 !important;
+        border: none !important;
+        border-radius: 8px !important;
       }
 
       /* KPI text */
       .kpi {
         font-size: 20px;
-        color: var(--dark-green);
-        font-weight: 700;
+        color: var(--dark-green) !important;
+        font-weight: 700 !important;
       }
 
-      /* Muted text stays grey */
+      /* Table text & headers */
+      .stDataFrame, .dataframe, th, td {
+        color: var(--dark-green) !important;
+        background-color: white !important;
+      }
+
+      /* Muted text remains softer but visible */
       .small-muted {
-        color: #6b6b6b !important;
+        color: #5a5a5a !important;
         font-size: 12px;
       }
 
-      /* Logo row alignment */
-      .logo-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
+      /* Cards */
+      .card {
+        background: white !important;
+        color: var(--dark-green) !important;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+      }
+
+      /* Sidebar */
+      section[data-testid="stSidebar"] {
+        background-color: var(--soft-green) !important;
+        color: var(--dark-green) !important;
+      }
+
+      /* Chart labels */
+      text {
+        fill: var(--dark-green) !important;
       }
     </style>
     """,
