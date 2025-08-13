@@ -1,10 +1,7 @@
 # app.py
-# Local Food Wastage Management System – Power BI style
-# Uses food_wastage.db + providers_data.csv, receivers_data.csv, food_listings_data.csv, claims_data.csv
-
 import os
 import sqlite3
-from datetime import datetime, date
+from datetime import date, datetime
 
 import altair as alt
 import pandas as pd
@@ -18,43 +15,28 @@ st.set_page_config(page_title="Local Food Wastage System", layout="wide", page_i
 
 THEME_CSS = """
 <style>
-:root {
-  --beige: #E8E2D0;
-  --dark-green: #2E5339;
-  --accent-green: #4F8F4F;
-  --ink: #1A1A1A;
-}
-.stApp{ background:var(--beige); color:var(--dark-green); font-family:'Segoe UI',system-ui,sans-serif; }
-h1,h2,h3,h4,h5{ color:var(--dark-green) !important; font-weight:700; }
-section[data-testid="stSidebar"]{ background:var(--dark-green); color:#dbe7db; }
-section[data-testid="stSidebar"] *{ color:#dbe7db !important; }
-.block-container{ padding-top:0.8rem; }
-.card{ background:#fff; border-radius:12px; padding:1rem; box-shadow:0 4px 12px rgba(0,0,0,.08); }
-.kpi{ font-size:14px; text-transform:uppercase; letter-spacing:.04em; opacity:.9; }
-.kpi-value{ font-size:28px; font-weight:800; color:var(--dark-green); }
-.stButton>button{ background:var(--accent-green); color:#fff; border:none; border-radius:10px; padding:.5rem 1rem; font-weight:700; }
-.stButton>button:hover{ background:var(--dark-green); }
-.dataframe th{ background:var(--accent-green) !important; color:#fff !important; }
-.dataframe td{ color:var(--dark-green) !important; }
-.link { text-decoration:none; font-weight:700; color:var(--accent-green); }
-.small{ font-size:12px; opacity:.85; }
+:root{--beige:#E8E2D0;--dark-green:#2E5339;--accent-green:#4F8F4F;--ink:#1A1A1A;}
+.stApp{background:var(--beige); color:var(--dark-green); font-family:'Segoe UI',sans-serif;}
+h1,h2,h3,h4,h5{color:var(--dark-green) !important; font-weight:700;}
+section[data-testid="stSidebar"]{background:var(--dark-green); color:#dbe7db;}
+section[data-testid="stSidebar"] *{color:#dbe7db !important;}
+.card{background:#fff; border-radius:10px; padding:12px;}
+.kpi-value{font-size:26px; font-weight:800; color:var(--dark-green);}
+.stButton>button{background:var(--accent-green); color:#fff; border-radius:8px;}
+.dataframe th{background:var(--accent-green) !important; color:#fff !important;}
 </style>
 """
 st.markdown(THEME_CSS, unsafe_allow_html=True)
 
 # -----------------------
-# CONSTANTS / PATHS
+# PATHS
 # -----------------------
 DB_PATH = "food_wastage.db"
-CSV_FILES = {
-    "Providers": "providers_data.csv",
-    "Receivers": "receivers_data.csv",
-    "Food_Listings": "food_listings_data.csv",
-    "Claims": "claims_data.csv",
-}
+LOGO_LEFT = "logo.png"
+LOGO_RIGHT = "recycle.png"
 
 # -----------------------
-# DB HELPERS
+# DB helpers
 # -----------------------
 @st.cache_resource
 def get_conn():
@@ -64,10 +46,7 @@ conn = get_conn()
 
 def table_exists(name: str) -> bool:
     try:
-        df = pd.read_sql(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
-            conn, params=(name,)
-        )
+        df = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", conn, params=(name,))
         return not df.empty
     except Exception:
         return False
@@ -92,397 +71,376 @@ def exec_sql(sql: str, params: tuple | None = None) -> bool:
         return False
 
 # -----------------------
-# LOAD HEADER IMAGES
+# Load images
 # -----------------------
-LOGO_LEFT = "logo.png"
-LOGO_RIGHT = "recycle.png"
 left_img = Image.open(LOGO_LEFT) if os.path.exists(LOGO_LEFT) else None
 right_img = Image.open(LOGO_RIGHT) if os.path.exists(LOGO_RIGHT) else None
 
 c1, c2, c3 = st.columns([1,6,1])
 with c1:
-    if left_img: st.image(left_img, width=84)
+    if left_img: st.image(left_img, width=80)
 with c2:
     st.markdown("<h1 style='text-align:center;'>🌿 Local Food Wastage Management System</h1>", unsafe_allow_html=True)
 with c3:
-    if right_img: st.image(right_img, width=64)
+    if right_img: st.image(right_img, width=60)
 st.markdown("---")
 
 # -----------------------
-# SIDEBAR NAV
+# Sidebar navigation
 # -----------------------
 st.sidebar.header("Navigation")
-page = st.sidebar.radio(
-    "Go to",
-    [
-        "Dashboard",
-        "Donations Analysis",
-        "Providers Insights",
-        "Receivers Insights",
-        "Wastage & Expiry",
-        "Filter Food",
-        "Queries",
-        "CRUD",
-        "Data",
-        "About",
-    ],
-)
+page = st.sidebar.radio("Go to", [
+    "Dashboard",
+    "Donations Analysis",
+    "Providers Insights",
+    "Receivers Insights",
+    "Wastage & Expiry",
+    "Filter Food",
+    "Queries",
+    "CRUD",
+    "Data",
+    "About"
+])
 
 # -----------------------
-# SHARED DATAFRAMES (lazy)
+# Load base tables (cached)
 # -----------------------
 @st.cache_data(show_spinner=False)
-def load_base_tables():
-    dfs = {}
-    for t in ["Providers", "Receivers", "Food_Listings", "Claims"]:
-        dfs[t] = run_sql(f"SELECT * FROM {t}") if table_exists(t) else pd.DataFrame()
-    return dfs
+def load_tables():
+    out = {}
+    for t in ["Providers","Receivers","Food_Listings","Claims"]:
+        if table_exists(t):
+            df = run_sql(f"SELECT * FROM {t}")
+            # normalize column names (strip whitespace)
+            df.columns = df.columns.str.strip()
+            out[t] = df
+        else:
+            out[t] = pd.DataFrame()
+    return out
 
-dfs = load_base_tables()
+dfs = load_tables()
 providers = dfs["Providers"]
 receivers = dfs["Receivers"]
 food = dfs["Food_Listings"]
 claims = dfs["Claims"]
 
-# Helpers
-def int_safe(x):
-    try: return int(x)
-    except: return 0
+# Defensive cleaning helper
+def prepare_food_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty: 
+        return df
+    df = df.copy()
+    df.columns = df.columns.str.strip()
+    # Coerce numeric
+    if "Quantity" in df.columns:
+        df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce").fillna(0)
+    # Parse expiry
+    if "Expiry_Date" in df.columns:
+        df["Expiry_Date"] = pd.to_datetime(df["Expiry_Date"], errors="coerce")
+        today = pd.to_datetime(date.today())
+        df["Days_To_Expiry"] = (df["Expiry_Date"].dt.normalize() - today).dt.days.abs().astype("Int64")
+    else:
+        df["Days_To_Expiry"] = pd.NA
+    # Strip text cols
+    for c in df.select_dtypes(include=["object"]).columns:
+        df[c] = df[c].astype(str).str.strip()
+    return df
 
-def compute_days_to_expiry(df: pd.DataFrame) -> pd.DataFrame:
-    if "Expiry_Date" not in df.columns: return df
-    out = df.copy()
-    out["Expiry_Date"] = pd.to_datetime(out["Expiry_Date"], errors="coerce")
-    today = pd.to_datetime(date.today())
-    # absolute difference (no negative sign)
-    out["Days_To_Expiry"] = (out["Expiry_Date"].dt.normalize() - today).dt.days.abs()
-    return out
+def prepare_claims_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    df = df.copy()
+    df.columns = df.columns.str.strip()
+    # parse timestamp if present
+    for c in ["Timestamp","timestamp","Date","date","Claim_Date"]:
+        if c in df.columns:
+            df["Timestamp"] = pd.to_datetime(df[c], errors="coerce")
+            break
+    # coerce numeric fields if any
+    for c in df.columns:
+        if df[c].dtype == "object":
+            df[c] = df[c].astype(str).str.strip()
+    return df
 
-def mailto_link(label, email_or_phone):
-    if pd.isna(email_or_phone) or str(email_or_phone).strip()=="":
-        return "-"
-    val = str(email_or_phone).strip()
-    if any(ch.isalpha() for ch in val) and "@" in val:
-        return f"<a class='link' href='mailto:{val}'>{label}</a>"
-    # assume it's a phone otherwise
-    return f"<a class='link' href='tel:{val}'>{label}</a>"
+food = prepare_food_df(food)
+claims = prepare_claims_df(claims)
+# normalize providers/receivers text cols
+for df in (providers, receivers):
+    if not df.empty:
+        df.columns = df.columns.str.strip()
+        for c in df.select_dtypes(include=["object"]).columns:
+            df[c] = df[c].astype(str).str.strip()
 
-# =========================================================
-# PAGE: DASHBOARD  (Power BI–style + global interactive filters)
-# =========================================================
+# small helper to create contact links
+def make_contact_html(df: pd.DataFrame, name_col: str, contact_col: str, id_col: str):
+    if df.empty:
+        return ""
+    out = df[[id_col, name_col, contact_col]].fillna("")
+    out["ContactLink"] = out[contact_col].apply(lambda v: (f"<a href='mailto:{v}'>{v}</a>" if "@" in v else (f"<a href='tel:{v}'>{v}</a>" if v else "")))
+    return out.to_html(escape=False, index=False)
+
+# -----------------------
+# PAGE: Dashboard
+# -----------------------
 if page == "Dashboard":
     st.header("Dashboard")
 
-    if any(df.empty for df in [providers, receivers, food]):
-        st.warning("Missing tables in database. Ensure Providers, Receivers and Food_Listings exist.")
+    if food.empty or providers.empty:
+        st.warning("Food_Listings and Providers tables are required for the dashboard.")
         st.stop()
 
-    # Global interactive filters
-    with st.expander("🔎 Filters", expanded=True):
-        colf1, colf2, colf3, colf4 = st.columns(4)
-        cities = sorted(list(set(providers.get("City", pd.Series()).dropna().unique()) |
-                             set(receivers.get("City", pd.Series()).dropna().unique()) |
-                             set(food.get("Location", pd.Series()).dropna().unique())))
-        city = colf1.selectbox("City", ["All"] + cities)
-        meal_types = sorted(food.get("Meal_Type", pd.Series()).dropna().unique().tolist())
-        meal = colf2.multiselect("Meal Type", meal_types, default=meal_types)
-        food_types = sorted(food.get("Food_Type", pd.Series()).dropna().unique().tolist())
-        ftypes = colf3.multiselect("Food Type", food_types, default=food_types)
-        max_days = int(food.shape[0] and 30 or 0)
-        days_window = colf4.slider("Days to Expiry (absolute)", value=(0, 7), min_value=0, max_value=60)
-
-    # Prep working DF with absolute days to expiry
-    wf = compute_days_to_expiry(food)
-    if city != "All":
-        wf = wf[(wf["Location"] == city) | (wf["Location"] == city.title())]
-    if meal:
-        wf = wf[wf["Meal_Type"].isin(meal)]
-    if ftypes:
-        wf = wf[wf["Food_Type"].isin(ftypes)]
-    wf = wf[(wf["Days_To_Expiry"] >= days_window[0]) & (wf["Days_To_Expiry"] <= days_window[1])]
-
-    # KPIs
-    cK1, cK2, cK3, cK4 = st.columns(4)
-    k_providers = int(run_sql("SELECT COUNT(*) c FROM Providers")["c"].iloc[0]) if not providers.empty else 0
-    k_receivers = int(run_sql("SELECT COUNT(*) c FROM Receivers")["c"].iloc[0]) if not receivers.empty else 0
-    k_food_qty = int_safe(wf["Quantity"].sum()) if "Quantity" in wf.columns else 0
-    k_claims = int(run_sql("SELECT COUNT(*) c FROM Claims")["c"].iloc[0]) if not claims.empty else 0
-
-    with cK1: st.markdown("<div class='card kpi'>Providers<div class='kpi-value'>%d</div></div>" % k_providers, unsafe_allow_html=True)
-    with cK2: st.markdown("<div class='card kpi'>Receivers<div class='kpi-value'>%d</div></div>" % k_receivers, unsafe_allow_html=True)
-    with cK3: st.markdown("<div class='card kpi'>Total Food Quantity<div class='kpi-value'>%d</div></div>" % k_food_qty, unsafe_allow_html=True)
-    with cK4: st.markdown("<div class='card kpi'>Total Claims<div class='kpi-value'>%d</div></div>" % k_claims, unsafe_allow_html=True)
-
-    st.markdown("")
-
-    # Chart type selector (Bar or Pie) for Claims status
-    chart_type = st.selectbox("Chart type for status breakdown", ["Bar", "Pie"], index=0)
-
-    grid1 = st.columns((2, 1))
-    # Top Providers by donated quantity
-    top_prov_sql = """
-        SELECT p.Name, SUM(f.Quantity) AS Total_Donated
-        FROM Food_Listings f
-        JOIN Providers p ON f.Provider_ID = p.Provider_ID
-        GROUP BY p.Name
-        ORDER BY Total_Donated DESC
-        LIMIT 15;
-    """
-    top_prov = run_sql(top_prov_sql)
-    with grid1[0]:
-        st.subheader("Top Providers by Donated Quantity")
-        if not top_prov.empty:
-            ch = (
-                alt.Chart(top_prov)
-                .mark_bar()
-                .encode(
-                    x=alt.X("Total_Donated:Q", title="Quantity Donated"),
-                    y=alt.Y("Name:N", sort="-x", title="Provider"),
-                    tooltip=["Name", "Total_Donated"],
-                )
-                .properties(height=380)
-            )
-            st.altair_chart(ch, use_container_width=True)
+    # Global filter controls
+    with st.expander("Filters", expanded=True):
+        # city options aggregated from providers, receivers and food location
+        city_opts = sorted(set(
+            providers["City"].dropna().str.strip().unique().tolist() +
+            receivers["City"].dropna().str.strip().unique().tolist() +
+            food["Location"].dropna().str.strip().unique().tolist()
+        ))
+        sel_city = st.selectbox("City", ["All"] + city_opts)
+        provider_opts = sorted(food["Provider_ID"].dropna().unique().tolist())
+        # map provider ids to names if providers table present
+        prov_map = {}
+        if not providers.empty and "Provider_ID" in providers.columns and "Name" in providers.columns:
+            prov_map = dict(zip(providers["Provider_ID"], providers["Name"]))
+            provider_names = [prov_map.get(i, str(i)) for i in provider_opts]
         else:
-            st.info("No donation data available.")
+            provider_names = [str(i) for i in provider_opts]
+        sel_provider = st.selectbox("Provider", ["All"] + provider_names)
+        food_type_opts = sorted(food["Food_Type"].dropna().unique().tolist())
+        sel_food_type = st.selectbox("Food Type", ["All"] + food_type_opts)
+        day_min = int(food["Days_To_Expiry"].dropna().min()) if food["Days_To_Expiry"].notna().any() else 0
+        day_max = int(food["Days_To_Expiry"].dropna().max()) if food["Days_To_Expiry"].notna().any() else 30
+        sel_days = st.slider("Days to Expiry (absolute)", min_value=day_min, max_value=day_max if day_max>day_min else day_min+7, value=(day_min, min(day_min+7, day_max)))
 
-    # Claims status distribution (bar/pie)
-    with grid1[1]:
-        st.subheader("Claims Status")
-        status_df = run_sql("SELECT Status, COUNT(*) AS Count FROM Claims GROUP BY Status")
-        if not status_df.empty:
-            if chart_type == "Pie":
-                ch2 = (
-                    alt.Chart(status_df)
-                    .mark_arc()
-                    .encode(theta="Count:Q", color="Status:N", tooltip=["Status", "Count"])
-                    .properties(height=280, width=280)
-                )
-            else:
-                ch2 = (
-                    alt.Chart(status_df)
-                    .mark_bar()
-                    .encode(x=alt.X("Status:N", title="Status"), y=alt.Y("Count:Q"), tooltip=["Status", "Count"])
-                    .properties(height=280)
-                )
-            st.altair_chart(ch2, use_container_width=True)
+    # apply filters to food df
+    wf = food.copy()
+    if sel_city and sel_city != "All":
+        wf = wf[(wf["Location"].str.lower() == sel_city.lower()) | (wf.get("Provider_City", "").str.lower() == sel_city.lower())]
+    if sel_provider and sel_provider != "All":
+        # find provider id by name
+        inv_map = {v:k for k,v in prov_map.items()}
+        pid = inv_map.get(sel_provider, None)
+        if pid is not None:
+            wf = wf[wf["Provider_ID"] == pid]
         else:
-            st.info("No claims data.")
+            # maybe provider selection was ID string
+            try:
+                pid_int = int(sel_provider)
+                wf = wf[wf["Provider_ID"] == pid_int]
+            except Exception:
+                pass
+    if sel_food_type and sel_food_type != "All":
+        wf = wf[wf["Food_Type"] == sel_food_type]
+    if "Days_To_Expiry" in wf.columns:
+        wf = wf[(wf["Days_To_Expiry"].notna()) & (wf["Days_To_Expiry"].astype("Int64") >= sel_days[0]) & (wf["Days_To_Expiry"].astype("Int64") <= sel_days[1])]
 
-    # Listings expiring soon (uses absolute Days_To_Expiry)
-    st.subheader("Listings matching your filters")
-    show_cols = ["Food_ID", "Food_Name", "Quantity", "Expiry_Date", "Location", "Provider_ID", "Food_Type", "Meal_Type", "Days_To_Expiry"]
-    for c in show_cols:
-        if c not in wf.columns: wf[c] = None
-    st.dataframe(wf[show_cols].sort_values("Days_To_Expiry", ascending=True))
+    # KPI row
+    kp1, kp2, kp3, kp4 = st.columns(4)
+    kp1.metric("Providers", int(run_sql("SELECT COUNT(*) as c FROM Providers")["c"].iloc[0]) if not providers.empty else 0)
+    kp2.metric("Receivers", int(run_sql("SELECT COUNT(*) as c FROM Receivers")["c"].iloc[0]) if not receivers.empty else 0)
+    kp3.metric("Total Food Quantity (filtered)", int(wf["Quantity"].sum()) if "Quantity" in wf.columns else 0)
+    kp4.metric("Total Claims", int(run_sql("SELECT COUNT(*) as c FROM Claims")["c"].iloc[0]) if not claims.empty else 0)
 
-# =========================================================
-# PAGE: DONATIONS ANALYSIS (EDA #1‒#3)
-# =========================================================
+    st.markdown("---")
+
+    # Top providers chart: ensure numeric and no malformed columns
+    prov_merge = wf.merge(providers[["Provider_ID","Name"]], on="Provider_ID", how="left").rename(columns={"Name":"Provider_Name"})
+    prov_merge["Quantity"] = pd.to_numeric(prov_merge.get("Quantity", 0), errors="coerce").fillna(0)
+    top_providers = prov_merge.groupby("Provider_Name", as_index=False)["Quantity"].sum().sort_values("Quantity", ascending=False).head(12)
+    st.subheader("Top Providers by Donated Quantity (filtered)")
+    if not top_providers.empty:
+        ch = alt.Chart(top_providers).mark_bar().encode(
+            x=alt.X("Quantity:Q", title="Quantity"),
+            y=alt.Y("Provider_Name:N", sort='-x'),
+            tooltip=["Provider_Name","Quantity"]
+        ).properties(height=360)
+        st.altair_chart(ch, use_container_width=True)
+    else:
+        st.info("No data for top providers under current filters.")
+
+    # Claims status distribution
+    st.subheader("Claims Status Distribution")
+    if not claims.empty and "Status" in claims.columns:
+        status_df = claims.groupby("Status", as_index=False).size().reset_index(name="Count") if False else claims["Status"].value_counts().reset_index().rename(columns={"index":"Status","Status":"Count"})
+        # display as bar and pie
+        colA, colB = st.columns(2)
+        with colA:
+            st.write("Status - Bar")
+            st.altair_chart(alt.Chart(status_df).mark_bar().encode(x="Status:N", y="Count:Q", tooltip=["Status","Count"]), use_container_width=True)
+        with colB:
+            st.write("Status - Pie")
+            st.altair_chart(alt.Chart(status_df).mark_arc().encode(theta="Count:Q", color="Status:N", tooltip=["Status","Count"]), use_container_width=True)
+    else:
+        st.info("No claims status data.")
+
+    st.markdown("---")
+    st.subheader("Listings matching filters")
+    show_cols = [c for c in ["Food_ID","Food_Name","Quantity","Expiry_Date","Location","Provider_ID","Food_Type","Meal_Type","Days_To_Expiry"] if c in wf.columns]
+    display_df = wf[show_cols].sort_values("Days_To_Expiry", na_position="last")
+    st.dataframe(display_df, use_container_width=True)
+
+# -----------------------
+# PAGE: Donations Analysis
+# -----------------------
 elif page == "Donations Analysis":
-    st.header("Donations Analysis")
+    st.header("Donations Analysis (EDA)")
 
     if food.empty:
-        st.warning("Food_Listings table is empty.")
+        st.warning("No Food_Listings data.")
         st.stop()
 
     f = food.copy()
     f["Expiry_Date"] = pd.to_datetime(f["Expiry_Date"], errors="coerce")
-    f["YearMonth"] = f["Expiry_Date"].dt.to_period("M").astype(str)
+    f["YearMonth"] = f["Expiry_Date"].dt.to_period("M").astype(str).fillna("Unknown")
 
-    # EDA #1: Trend – Total quantity listed by month
-    st.subheader("📅 Monthly Quantity Listed")
-    m = f.groupby("YearMonth", as_index=False)["Quantity"].sum()
-    line = alt.Chart(m).mark_line(point=True).encode(
-        x=alt.X("YearMonth:N", title="Month"),
-        y=alt.Y("Quantity:Q", title="Total Quantity"),
-        tooltip=["YearMonth", "Quantity"],
-    )
-    st.altair_chart(line, use_container_width=True)
+    st.subheader("Monthly Quantity Listed")
+    monthly = f.groupby("YearMonth", as_index=False)["Quantity"].sum().sort_values("YearMonth")
+    st.altair_chart(alt.Chart(monthly).mark_line(point=True).encode(x="YearMonth:N", y="Quantity:Q", tooltip=["YearMonth","Quantity"]), use_container_width=True)
 
-    # EDA #2: Distribution – Food type vs quantity
-    st.subheader("🍽️ Food Type Distribution (Quantity)")
+    st.subheader("Food Type Distribution (by Quantity)")
     ft = f.groupby("Food_Type", as_index=False)["Quantity"].sum().sort_values("Quantity", ascending=False)
-    bar = alt.Chart(ft).mark_bar().encode(
-        x=alt.X("Quantity:Q"),
-        y=alt.Y("Food_Type:N", sort="-x"),
-        tooltip=["Food_Type", "Quantity"],
-    ).properties(height=360)
-    st.altair_chart(bar, use_container_width=True)
+    st.altair_chart(alt.Chart(ft).mark_bar().encode(x="Quantity:Q", y=alt.Y("Food_Type:N", sort="-x"), tooltip=["Food_Type","Quantity"]), use_container_width=True)
 
-    # EDA #3: Meal type share (Pie)
-    st.subheader("🥣 Meal Type Share")
+    st.subheader("Meal Type Share")
     mt = f.groupby("Meal_Type", as_index=False)["Quantity"].sum()
-    pie = alt.Chart(mt).mark_arc().encode(
-        theta="Quantity:Q",
-        color="Meal_Type:N",
-        tooltip=["Meal_Type", "Quantity"],
-    ).properties(height=320, width=320)
-    st.altair_chart(pie, use_container_width=False)
+    st.altair_chart(alt.Chart(mt).mark_arc().encode(theta="Quantity:Q", color="Meal_Type:N", tooltip=["Meal_Type","Quantity"]), use_container_width=True)
 
-# =========================================================
-# PAGE: PROVIDERS INSIGHTS (EDA #4)
-# =========================================================
+# -----------------------
+# PAGE: Providers Insights
+# -----------------------
 elif page == "Providers Insights":
     st.header("Providers Insights")
 
     if providers.empty or food.empty:
-        st.warning("Providers or Food_Listings table is empty.")
+        st.warning("Providers or Food_Listings missing.")
         st.stop()
 
-    pf = (
-        food.merge(providers[["Provider_ID", "Name", "City", "Type"]], on="Provider_ID", how="left")
-        .rename(columns={"Name": "Provider_Name", "Type": "Provider_Type"})
-    )
+    pf = food.merge(providers[["Provider_ID","Name","City","Type"]], on="Provider_ID", how="left").rename(columns={"Name":"Provider_Name","Type":"Provider_Type"})
+    # ensure Quantity numeric
+    pf["Quantity"] = pd.to_numeric(pf.get("Quantity",0), errors="coerce").fillna(0)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("🏭 Top Providers (Quantity)")
-        topP = pf.groupby("Provider_Name", as_index=False)["Quantity"].sum().sort_values("Quantity", ascending=False).head(20)
-        ch = alt.Chart(topP).mark_bar().encode(
-            x="Quantity:Q", y=alt.Y("Provider_Name:N", sort="-x"),
-            tooltip=["Provider_Name", "Quantity"]
-        ).properties(height=500)
-        st.altair_chart(ch, use_container_width=True)
+    st.subheader("Top Providers (by Quantity)")
+    topP = pf.groupby("Provider_Name", as_index=False)["Quantity"].sum().sort_values("Quantity", ascending=False).head(20)
+    st.altair_chart(alt.Chart(topP).mark_bar().encode(x="Quantity:Q", y=alt.Y("Provider_Name:N", sort="-x"), tooltip=["Provider_Name","Quantity"]), use_container_width=True)
 
-    with c2:
-        st.subheader("🏷️ Provider Type Contribution")
+    st.subheader("Provider Type Contribution")
+    if "Provider_Type" in pf.columns:
         pt = pf.groupby("Provider_Type", as_index=False)["Quantity"].sum()
-        ch2 = alt.Chart(pt).mark_bar().encode(
-            x="Quantity:Q", y=alt.Y("Provider_Type:N", sort="-x"),
-            tooltip=["Provider_Type", "Quantity"]
-        ).properties(height=500)
-        st.altair_chart(ch2, use_container_width=True)
+        st.altair_chart(alt.Chart(pt).mark_bar().encode(x="Quantity:Q", y=alt.Y("Provider_Type:N", sort="-x"), tooltip=["Provider_Type","Quantity"]), use_container_width=True)
+    else:
+        st.info("No Provider_Type column available.")
 
-    st.subheader("📍 Providers by City (Count vs Quantity)")
-    by_city = pf.groupby("City", as_index=False).agg(Providers=("Provider_ID", "nunique"), Total_Quantity=("Quantity", "sum"))
-    ch3 = alt.Chart(by_city).mark_circle(size=200).encode(
-        x=alt.X("Providers:Q", title="Unique Providers"),
-        y=alt.Y("Total_Quantity:Q", title="Total Quantity"),
-        tooltip=["City", "Providers", "Total_Quantity"],
-    )
-    st.altair_chart(ch3, use_container_width=True)
+    st.subheader("Providers Contact List")
+    contact_html = make_contact_html(providers, name_col="Name", contact_col="Contact", id_col="Provider_ID") if not providers.empty else ""
+    st.write(contact_html, unsafe_allow_html=True)
 
-    st.markdown("**Contact Providers (click to call / email):**")
-    cp = providers.fillna("")
-    cp["ContactLink"] = cp["Contact"].apply(lambda v: mailto_link("Contact", v))
-    st.write(cp[["Provider_ID", "Name", "Type", "City"]].assign(Contact=cp["ContactLink"]).to_html(escape=False, index=False), unsafe_allow_html=True)
-
-# =========================================================
-# PAGE: RECEIVERS INSIGHTS (EDA #5)
-# =========================================================
+# -----------------------
+# PAGE: Receivers Insights
+# -----------------------
 elif page == "Receivers Insights":
     st.header("Receivers Insights")
 
     if receivers.empty or claims.empty or food.empty:
-        st.warning("Receivers, Claims or Food_Listings table is empty.")
+        st.warning("Receivers, Claims, or Food_Listings missing.")
         st.stop()
 
-    cf = (
-        claims.merge(receivers[["Receiver_ID", "Name", "Type", "City", "Contact"]], on="Receiver_ID", how="left")
-        .merge(food[["Food_ID", "Quantity", "Meal_Type", "Food_Type", "Location"]], on="Food_ID", how="left")
-        .rename(columns={"Name": "Receiver_Name"})
-    )
+    cf = claims.merge(receivers[["Receiver_ID","Name","City","Contact"]], on="Receiver_ID", how="left").merge(
+        food[["Food_ID","Quantity","Meal_Type","Food_Type","Location"]], on="Food_ID", how="left"
+    ).rename(columns={"Name":"Receiver_Name"})
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("📦 Top Receivers by Claimed Quantity")
-        r1 = cf.groupby("Receiver_Name", as_index=False)["Quantity"].sum().sort_values("Quantity", ascending=False).head(20)
-        ch = alt.Chart(r1).mark_bar().encode(
-            x="Quantity:Q", y=alt.Y("Receiver_Name:N", sort="-x"),
-            tooltip=["Receiver_Name", "Quantity"],
-        ).properties(height=500)
-        st.altair_chart(ch, use_container_width=True)
+    cf["Quantity"] = pd.to_numeric(cf.get("Quantity",0), errors="coerce").fillna(0)
 
-    with c2:
-        st.subheader("🗺️ Receiver Cities – Claims Count")
-        r2 = cf.groupby("City", as_index=False)["Receiver_ID"].count().rename(columns={"Receiver_ID": "Claims"})
-        ch2 = alt.Chart(r2).mark_bar().encode(
-            x="Claims:Q", y=alt.Y("City:N", sort="-x"),
-            tooltip=["City", "Claims"],
-        ).properties(height=500)
-        st.altair_chart(ch2, use_container_width=True)
+    st.subheader("Top Receivers by Claimed Quantity")
+    r1 = cf.groupby("Receiver_Name", as_index=False)["Quantity"].sum().sort_values("Quantity", ascending=False).head(20)
+    st.altair_chart(alt.Chart(r1).mark_bar().encode(x="Quantity:Q", y=alt.Y("Receiver_Name:N", sort="-x"), tooltip=["Receiver_Name","Quantity"]), use_container_width=True)
 
-    st.subheader("☎️ Contact Receivers")
-    rr = receivers.fillna("")
-    rr["ContactLink"] = rr["Contact"].apply(lambda v: mailto_link("Contact", v))
-    st.write(rr[["Receiver_ID", "Name", "Type", "City"]].assign(Contact=rr["ContactLink"]).to_html(escape=False, index=False), unsafe_allow_html=True)
+    st.subheader("Receiver Cities – Claims Count")
+    r2 = cf.groupby("City", as_index=False)["Receiver_ID"].count().rename(columns={"Receiver_ID":"Claims"})
+    st.altair_chart(alt.Chart(r2).mark_bar().encode(x="Claims:Q", y=alt.Y("City:N", sort="-x"), tooltip=["City","Claims"]), use_container_width=True)
 
-# =========================================================
-# PAGE: WASTAGE & EXPIRY (EDA #6 + filters)
-# =========================================================
+    st.subheader("Receivers Contact List")
+    rhtml = make_contact_html(receivers, name_col="Name", contact_col="Contact", id_col="Receiver_ID")
+    st.write(rhtml, unsafe_allow_html=True)
+
+# -----------------------
+# PAGE: Wastage & Expiry
+# -----------------------
 elif page == "Wastage & Expiry":
-    st.header("Wastage & Expiry Risk")
+    st.header("Wastage & Expiry Analysis")
 
     if food.empty:
-        st.warning("Food_Listings table is empty.")
+        st.warning("Food_Listings missing.")
         st.stop()
 
-    f = compute_days_to_expiry(food)
-    colf1, colf2 = st.columns(2)
-    ftypes_all = sorted(f["Food_Type"].dropna().unique().tolist())
-    meals_all = sorted(f["Meal_Type"].dropna().unique().tolist())
-    choose_ft = colf1.multiselect("Food Type", options=ftypes_all, default=ftypes_all)
-    choose_meal = colf2.multiselect("Meal Type", options=meals_all, default=meals_all)
-    days_rng = st.slider("Days to Expiry (absolute)", 0, 60, (0, 10))
+    f = food.copy()
+    f["Expiry_Date"] = pd.to_datetime(f["Expiry_Date"], errors="coerce")
+    f["Days_To_Expiry"] = (f["Expiry_Date"].dt.normalize() - pd.to_datetime(date.today())).dt.days.abs().astype("Int64")
 
-    ff = f[(f["Food_Type"].isin(choose_ft)) & (f["Meal_Type"].isin(choose_meal))]
-    ff = ff[(ff["Days_To_Expiry"] >= days_rng[0]) & (ff["Days_To_Expiry"] <= days_rng[1])]
+    st.subheader("Quantity by Days to Expiry (absolute)")
+    dte = f.groupby("Days_To_Expiry", as_index=False)["Quantity"].sum().sort_values("Days_To_Expiry")
+    st.altair_chart(alt.Chart(dte).mark_bar().encode(x="Days_To_Expiry:Q", y="Quantity:Q", tooltip=["Days_To_Expiry","Quantity"]), use_container_width=True)
 
-    st.subheader("⏳ Quantity by Days-to-Expiry (Absolute)")
-    dte = ff.groupby("Days_To_Expiry", as_index=False)["Quantity"].sum().sort_values("Days_To_Expiry")
-    ch = alt.Chart(dte).mark_bar().encode(
-        x=alt.X("Days_To_Expiry:Q", title="Days To Expiry (abs)"),
-        y=alt.Y("Quantity:Q"),
-        tooltip=["Days_To_Expiry", "Quantity"],
-    )
-    st.altair_chart(ch, use_container_width=True)
-
-    st.subheader("⚠️ Expired Listings")
+    st.subheader("Expired Listings")
     expired = f[pd.to_datetime(f["Expiry_Date"], errors="coerce") < pd.to_datetime(date.today())]
-    show = ["Food_ID", "Food_Name", "Quantity", "Expiry_Date", "Location", "Food_Type", "Meal_Type", "Days_To_Expiry"]
-    st.dataframe(expired[show].sort_values("Expiry_Date"))
+    if not expired.empty:
+        show_cols = [c for c in ["Food_ID","Food_Name","Quantity","Expiry_Date","Location","Food_Type","Meal_Type","Days_To_Expiry"] if c in expired.columns]
+        st.dataframe(expired[show_cols].sort_values("Expiry_Date"), use_container_width=True)
+    else:
+        st.info("No expired listings.")
 
-# =========================================================
-# PAGE: FILTER FOOD (search + contact)
-# =========================================================
+# -----------------------
+# PAGE: Filter Food (search + contact)
+# -----------------------
 elif page == "Filter Food":
     st.header("Filter Food Donations")
 
     if food.empty or providers.empty:
-        st.warning("Food_Listings or Providers table is empty.")
+        st.warning("Food_Listings or Providers table missing.")
         st.stop()
 
-    ff = food.merge(providers[["Provider_ID", "Name", "Contact"]], on="Provider_ID", how="left").rename(
-        columns={"Name": "Provider_Name", "Contact": "Provider_Contact"}
-    )
+    ff = food.merge(providers[["Provider_ID","Name","Contact"]], on="Provider_ID", how="left").rename(columns={"Name":"Provider_Name","Contact":"Provider_Contact"})
     cities = ["All"] + sorted(ff["Location"].dropna().unique().tolist())
-    providers_list = ["All"] + sorted(ff["Provider_Name"].dropna().unique().tolist())
+    provs = ["All"] + sorted(ff["Provider_Name"].dropna().unique().tolist())
     ftypes = ["All"] + sorted(ff["Food_Type"].dropna().unique().tolist())
 
-    c1, c2, c3 = st.columns(3)
-    city = c1.selectbox("City", cities)
-    prov = c2.selectbox("Provider", providers_list)
-    ftype = c3.selectbox("Food Type", ftypes)
+    col1, col2, col3 = st.columns(3)
+    sel_city = col1.selectbox("City", cities)
+    sel_prov = col2.selectbox("Provider", provs)
+    sel_ft = col3.selectbox("Food Type", ftypes)
 
     res = ff.copy()
-    if city != "All": res = res[res["Location"] == city]
-    if prov != "All": res = res[res["Provider_Name"] == prov]
-    if ftype != "All": res = res[res["Food_Type"] == ftype]
+    if sel_city != "All":
+        res = res[res["Location"] == sel_city]
+    if sel_prov != "All":
+        res = res[res["Provider_Name"] == sel_prov]
+    if sel_ft != "All":
+        res = res[res["Food_Type"] == sel_ft]
 
     if res.empty:
         st.info("No matching listings.")
     else:
-        res["ContactLink"] = res["Provider_Contact"].apply(lambda v: mailto_link("Contact", v))
-        cols = ["Food_ID", "Food_Name", "Quantity", "Expiry_Date", "Location", "Provider_Name", "Food_Type", "Meal_Type"]
-        st.dataframe(res[cols].assign(Contact=res["ContactLink"]).sort_values("Expiry_Date").to_html(escape=False, index=False), unsafe_allow_html=True)
+        # create a safe contact column and show DataFrame normally
+        res = res.assign(Provider_Contact = res["Provider_Contact"].fillna(""))
+        display_cols = [c for c in ["Food_ID","Food_Name","Quantity","Expiry_Date","Location","Provider_Name","Food_Type","Meal_Type","Provider_Contact"] if c in res.columns]
+        st.dataframe(res[display_cols].sort_values("Expiry_Date"), use_container_width=True)
 
-# =========================================================
-# PAGE: QUERIES (15 predefined)
-# =========================================================
+        st.markdown("**Contact links:**")
+        # show a list of contact links (phone or mailto)
+        for _, row in res[['Provider_Name','Provider_Contact']].drop_duplicates().iterrows():
+            contact = str(row.get("Provider_Contact","")).strip()
+            if contact:
+                if "@" in contact:
+                    st.markdown(f"- **{row['Provider_Name']}** — [Email]({f'mailto:{contact}'})")
+                else:
+                    st.markdown(f"- **{row['Provider_Name']}** — [Call]({f'tel:{contact}'})")
+            else:
+                st.markdown(f"- **{row['Provider_Name']}** — (no contact)")
+
+# -----------------------
+# PAGE: Queries
+# -----------------------
 elif page == "Queries":
     st.header("SQL Queries & Outputs")
-
     QUERIES = {
         "Q1: Providers & Receivers per City": """
             SELECT City, SUM(Providers) AS Providers_Count, SUM(Receivers) AS Receivers_Count
@@ -595,136 +553,116 @@ elif page == "Queries":
         """,
     }
 
-    qname = st.selectbox("Choose query", list(QUERIES.keys()))
-    st.code(QUERIES[qname], language="sql")
-
+    q = st.selectbox("Select query", list(QUERIES.keys()))
+    st.code(QUERIES[q], language="sql")
     params = None
-    if qname.startswith("Q3"):
-        city = st.text_input("Enter city (case-insensitive)").strip()
+    if q.startswith("Q3"):
+        city = st.text_input("City (case-insensitive)").strip()
         if city:
             params = (city,)
         else:
-            st.info("Enter a city to run Q3.")
-
-    if (qname.startswith("Q3") and params) or not qname.startswith("Q3"):
-        out = run_sql(QUERIES[qname], params)
+            st.info("Enter city for Q3")
+    if not q.startswith("Q3") or params:
+        out = run_sql(QUERIES[q], params)
         if out.empty:
-            st.warning("No results.")
+            st.info("No results")
         else:
-            st.dataframe(out)
-            st.download_button("Download CSV", out.to_csv(index=False).encode("utf-8"), file_name=f"{qname.replace(' ','_')}.csv")
+            st.dataframe(out, use_container_width=True)
+            st.download_button("Download CSV", out.to_csv(index=False).encode("utf-8"), file_name=f"{q.replace(' ','_')}.csv")
 
-# =========================================================
+# -----------------------
 # PAGE: CRUD
-# =========================================================
+# -----------------------
 elif page == "CRUD":
-    st.header("CRUD Operations")
-    st.markdown("Add / Update / Delete items. Changes write directly to SQLite DB.")
+    st.header("CRUD (Create / Update / Delete)")
+    table = st.selectbox("Select table", ["Providers","Receivers","Food_Listings","Claims"])
+    if not table_exists(table):
+        st.warning(f"Table {table} not found in DB.")
+        st.stop()
+    df = run_sql(f"SELECT * FROM {table}")
+    st.subheader("Existing records")
+    st.dataframe(df, use_container_width=True)
 
-    table = st.selectbox("Select table", ["Providers", "Receivers", "Food_Listings", "Claims"])
-
-    # READ
-    df = run_sql(f"SELECT * FROM {table}") if table_exists(table) else pd.DataFrame()
-    st.subheader(f"Existing records – {table}")
-    st.dataframe(df)
-
-    st.markdown("---")
-    # CREATE
-    st.subheader(f"➕ Add new record to {table}")
-    if not df.empty:
-        cols = df.columns.tolist()
-    else:
-        # fallbacks
-        fallback = {
-            "Providers": ["Name","Type","Address","City","Contact"],
-            "Receivers": ["Name","Type","City","Contact"],
-            "Food_Listings": ["Food_Name","Quantity","Expiry_Date","Provider_ID","Provider_Type","Location","Food_Type","Meal_Type"],
-            "Claims": ["Food_ID","Receiver_ID","Status","Timestamp"],
-        }
+    st.markdown("### ➕ Add record")
+    # derive columns
+    cols = df.columns.tolist() if not df.empty else []
+    # fallback skeletons
+    fallback = {
+        "Providers": ["Name","Type","Address","City","Contact"],
+        "Receivers": ["Name","Type","City","Contact"],
+        "Food_Listings": ["Food_Name","Quantity","Expiry_Date","Provider_ID","Provider_Type","Location","Food_Type","Meal_Type"],
+        "Claims": ["Food_ID","Receiver_ID","Status","Timestamp"],
+    }
+    if not cols:
         cols = fallback.get(table, [])
-
-    new_vals = {}
+    add_vals = {}
+    pk_like = {c for c in cols if c.lower().endswith("id") and c.lower() in {"provider_id","receiver_id","food_id","claim_id"}}
     for c in cols:
-        # skip obvious PKs if present
-        if c.lower() in {"provider_id","receiver_id","food_id","claim_id"} and c in df.columns and df[c].dtype.kind in "iu":
+        if c in pk_like:
+            st.text(f"{c} (optional / autoincrement)")
             continue
-        if c.lower().endswith("date") or c.lower()=="timestamp":
-            dt = st.date_input(c, value=date.today(), key=f"add_{c}")
-            new_vals[c] = str(dt)
-        elif c.lower() in {"quantity"}:
-            new_vals[c] = st.number_input(c, min_value=0, value=0, step=1, key=f"add_{c}")
+        if c.lower().endswith("date") or c.lower() == "timestamp":
+            d = st.date_input(c, value=date.today(), key=f"add_{c}")
+            add_vals[c] = d.isoformat()
+        elif c.lower() == "quantity":
+            add_vals[c] = st.number_input(c, value=1, min_value=0, key=f"add_{c}")
         else:
-            new_vals[c] = st.text_input(c, key=f"add_{c}")
-
-    if st.button("Add Record"):
-        if new_vals:
-            colnames = ", ".join(new_vals.keys())
-            placeholders = ", ".join(["?"] * len(new_vals))
-            ok = exec_sql(f"INSERT INTO {table} ({colnames}) VALUES ({placeholders})", tuple(new_vals.values()))
-            if ok: st.success("Record added.")
+            add_vals[c] = st.text_input(c, key=f"add_{c}")
+    if st.button("Add"):
+        if add_vals:
+            cols_ins = ", ".join(add_vals.keys())
+            placeholders = ", ".join(["?"]*len(add_vals))
+            ok = exec_sql(f"INSERT INTO {table} ({cols_ins}) VALUES ({placeholders})", tuple(add_vals.values()))
+            if ok: st.success("Record added")
 
     st.markdown("---")
-    # UPDATE
-    st.subheader(f"✏️ Update record in {table}")
     if not df.empty:
+        st.subheader("✏️ Update record")
         pk = df.columns[0]
-        target_id = st.selectbox(f"Select {pk} to update", df[pk].tolist())
-        current = df[df[pk] == target_id].iloc[0].to_dict()
-        upd_vals = {}
+        sel = st.selectbox(f"Select {pk}", df[pk].tolist())
+        row = df[df[pk]==sel].iloc[0].to_dict()
+        upd = {}
         for c in df.columns:
             if c == pk:
-                st.caption(f"Primary key: **{pk} = {target_id}**")
+                st.caption(f"{pk} (primary key): {sel}")
                 continue
-            default = "" if pd.isna(current[c]) else str(current[c])
-            upd_vals[c] = st.text_input(c, value=default, key=f"upd_{c}")
-        if st.button("Update Record"):
-            set_clause = ", ".join([f"{k}=?" for k in upd_vals.keys()])
-            ok = exec_sql(f"UPDATE {table} SET {set_clause} WHERE {pk} = ?", tuple(upd_vals.values()) + (target_id,))
-            if ok: st.success("Record updated.")
+            upd[c] = st.text_input(c, value=str(row[c]), key=f"upd_{c}")
+        if st.button("Update"):
+            set_clause = ", ".join([f"{k}=?" for k in upd.keys()])
+            ok = exec_sql(f"UPDATE {table} SET {set_clause} WHERE {pk} = ?", tuple(upd.values()) + (sel,))
+            if ok: st.success("Updated")
 
     st.markdown("---")
-    # DELETE
-    st.subheader(f"🗑️ Delete record from {table}")
     if not df.empty:
+        st.subheader("🗑️ Delete record")
         pk = df.columns[0]
-        del_id = st.selectbox(f"Select {pk} to delete", df[pk].tolist(), key="del_id")
-        if st.button("Delete Record"):
-            ok = exec_sql(f"DELETE FROM {table} WHERE {pk} = ?", (del_id,))
-            if ok: st.success("Record deleted.")
+        did = st.selectbox(f"Select {pk} to delete", df[pk].tolist(), key="delid")
+        if st.button("Delete"):
+            ok = exec_sql(f"DELETE FROM {table} WHERE {pk} = ?", (did,))
+            if ok: st.success("Deleted")
 
-# =========================================================
-# PAGE: DATA (quick download)
-# =========================================================
+# -----------------------
+# PAGE: Data download
+# -----------------------
 elif page == "Data":
     st.header("Raw Data & Downloads")
     for t in ["Providers","Receivers","Food_Listings","Claims"]:
         st.subheader(t)
         if table_exists(t):
             d = run_sql(f"SELECT * FROM {t}")
-            st.dataframe(d)
+            st.dataframe(d, use_container_width=True)
             st.download_button(f"Download {t}.csv", d.to_csv(index=False).encode("utf-8"), file_name=f"{t}.csv")
         else:
-            st.info(f"Table {t} not found.")
+            st.info(f"{t} missing in DB.")
 
-# =========================================================
-# PAGE: ABOUT
-# =========================================================
+# -----------------------
+# PAGE: About
+# -----------------------
 elif page == "About":
-    st.header("About this app")
+    st.header("About")
     st.markdown("""
-**Local Food Wastage Management System** — Streamlit app for redistributing surplus food.
-
-**What you can do here**
-- Filter donations by city, provider & food type; contact providers/receivers directly.
-- Full CRUD on Providers / Receivers / Listings / Claims.
-- 15 SQL queries for reporting.
-- Power BI–style analytics with 6+ EDA reports:
-  - Monthly donation trends
-  - Food/meal type distributions
-  - Provider performance & type contribution
-  - Receiver demand patterns
-  - City-level supply/demand
-  - Expiry risk analysis (absolute Days-to-Expiry)
-
-**Tech**: Python • SQLite • Pandas • Streamlit • Altair
-""")
+    **Local Food Wastage Management System** — Streamlit app for redistributing surplus food.
+    - Dashboard with interactive filters & EDA
+    - CRUD and SQL queries
+    - Contact providers / receivers directly
+    """)
